@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+google-genai
+python-dotenv
+yt-dlp
+curl_cffi
+pydantic
+psycopg[binary]
+itsdangerous

@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>バズ台本AI - 自走PDCA</title>
+<style>
+  :root {
+    --accent: #ff0050;
+    --accent-cyan: #25f4ee;
+    --accent-amber: #ffd166;
+    --bg: #0f0f12;
+    --card: #1a1a20;
+    --card-hover: #22222a;
+    --text: #f5f5f7;
+    --muted: #9a9aa6;
+    --border: #2a2a33;
+    --tiktok: #ff0050;
+    --insta: #e1306c;
+    --youtube: #ff0000;
+    --good: #25f4ee;
+    --warn: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ログイン画面 */
+  .login-wrap {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .login-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 400px;
+  }
+  .login-card h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .login-card p { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  .login-form input {
+    width: 100%;
+    padding: 13px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    margin-bottom: 12px;
+    font-family: inherit;
+  }
+  .login-form input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .login-form button {
+    width: 100%;
+    padding: 13px;
+    border-radius: 10px;
+    border: 0;
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  .login-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .login-error { color: var(--warn); font-size: 13px; min-height: 18px; margin-top: 8px; }
+
+  /* レイアウト */
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 22px 20px;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { order: 2; }
+  }
+
+  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  h1 {
+    font-size: 22px;
+    margin: 0;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .user-chip {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted);
+  }
+  .user-chip strong { color: var(--text); }
+  p.lead { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+  .tab {
+    padding: 10px 18px; cursor: pointer;
+    border: 0; background: transparent; color: var(--muted);
+    font-weight: 600; font-size: 14px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .form-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  input[type="text"], textarea, select {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  textarea { resize: vertical; min-width: 100%; min-height: 80px; }
+  button {
+    padding: 12px 22px;
+    border-radius: 10px;
+    border: 0;
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 500;
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+  button.secondary:hover { background: var(--card-hover); color: var(--text); }
+  button.cyan { background: var(--accent-cyan); color: #000; }
+  button.tiny {
+    padding: 4px 10px; font-size: 11px;
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    font-weight: 500;
+  }
+  button.tiny:hover { color: var(--text); border-color: var(--muted); }
+  label.checkline {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 13px; cursor: pointer;
+    user-select: none;
+  }
+  label.checkline input { accent-color: var(--accent); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 16px; }
+  .card pre, .card .md {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.7;
+    font-family: inherit;
+    font-size: 13.5px;
+    margin: 0;
+  }
+  .status { color: var(--muted); font-size: 13px; margin-bottom: 12px; min-height: 18px; }
+  .error { color: var(--warn); }
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--muted);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .md h2 { font-size: 15px; margin: 14px 0 8px; color: var(--accent-cyan); }
+  .md h3 { font-size: 14px; margin: 12px 0 6px; color: var(--accent-amber); }
+  .md strong { color: var(--accent-amber); }
+  .md ul { margin: 4px 0 8px 20px; padding: 0; }
+  .md li { margin: 2px 0; }
+
+  .video-head {
+    display: flex; gap: 12px; align-items: center;
+    margin-bottom: 14px;
+  }
+  .video-head img {
+    width: 76px; height: 76px; border-radius: 8px; object-fit: cover; flex-shrink: 0;
+    background: #000;
+  }
+  .video-head .info { min-width: 0; flex: 1; }
+  .video-head .info .title { font-size: 14px; font-weight: 600; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .video-head .info .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .metrics-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin-bottom: 12px;
+  }
+  .metric-box {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; text-align: center;
+  }
+  .metric-box .num { font-size: 16px; font-weight: 700; color: var(--accent-cyan); }
+  .metric-box .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .metric-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+  .metric-input { width: 110px !important; padding: 6px 10px !important; font-size: 12px !important; }
+
+  .sidebar h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .sidebar h2 .count { color: var(--text); font-weight: 700; }
+  .knowledge-list {
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto; padding-right: 4px;
+  }
+  .knowledge-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+    position: relative;
+  }
+  .knowledge-item:hover { background: var(--card-hover); border-color: #3a3a45; }
+  .knowledge-item.active { border-color: var(--accent); }
+  .ki-row { display: flex; gap: 10px; align-items: flex-start; }
+  .ki-row img {
+    width: 56px; height: 56px; border-radius: 6px; object-fit: cover; flex-shrink: 0;
+    background: #000;
+  }
+  .ki-row .body { min-width: 0; flex: 1; }
+  .ki-row .title {
+    font-size: 12.5px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+  .ki-row .meta { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .ki-row .stats { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; }
+  .ki-row .stats .views { color: var(--accent-cyan); font-weight: 600; }
+  .ki-row .by { font-size: 11px; color: var(--accent-cyan); margin-top: 2px; }
+  .source-badge {
+    padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  }
+  .source-badge.tiktok { background: rgba(255,0,80,.15); color: #ff5680; }
+  .source-badge.instagram { background: rgba(225,48,108,.15); color: #f06090; }
+  .source-badge.youtube { background: rgba(255,0,0,.15); color: #ff5050; }
+  .source-badge.other { background: rgba(154,154,166,.15); color: var(--muted); }
+  .own-badge {
+    padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
+    background: rgba(37,244,238,.15); color: var(--accent-cyan);
+  }
+  .ki-delete {
+    position: absolute; top: 6px; right: 6px;
+    background: transparent; border: 0; color: var(--muted);
+    font-size: 14px; padding: 2px 6px; cursor: pointer; border-radius: 4px;
+    opacity: 0; transition: opacity .15s, background .15s;
+  }
+  .knowledge-item:hover .ki-delete { opacity: 1; }
+  .ki-delete:hover { background: rgba(255,107,107,.15); color: var(--warn); }
+  .empty {
+    color: var(--muted); font-size: 13px; padding: 20px 12px; text-align: center;
+    border: 1px dashed var(--border); border-radius: 10px;
+  }
+  .note-area {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 60px;
+  }
+  .insight-banner {
+    background: linear-gradient(135deg, rgba(37,244,238,.08), rgba(255,0,80,.08));
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .insight-banner.active { color: var(--accent-cyan); }
+  .insight-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    margin-bottom: 18px;
+  }
+  .stat-box {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; text-align: center;
+  }
+  .stat-box .num { font-size: 22px; font-weight: 800; }
+  .stat-box .lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .actions-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .saved-flash { color: var(--accent-cyan); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<!-- ─────────── ログイン画面 ─────────── -->
+<div id="login-screen" class="login-wrap" style="display:none;">
+  <div class="login-card">
+    <h1>バズ台本AI</h1>
+    <p>チームで使う共有ツールです。ユーザー名は自由（あなたの記録に使われます）。パスワードはチーム共通です。</p>
+    <form id="login-form" class="login-form">
+      <input id="login-username" type="text" placeholder="ユーザー名（例: ikeda）" autocomplete="username" required />
+      <input id="login-password" type="password" placeholder="共通パスワード" autocomplete="current-password" required />
+      <button type="submit" id="login-btn">ログイン</button>
+      <div id="login-error" class="login-error"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ─────────── アプリ本体 ─────────── -->
+<div id="app-screen" class="layout" style="display:none;">
+  <main>
+    <div class="header-row">
+      <h1>バズ台本AI - 自走PDCA</h1>
+      <div class="user-chip">
+        <span>👤 <strong id="me-name">-</strong></span>
+        <button class="tiny" id="logout-btn">ログアウト</button>
+      </div>
+    </div>
+    <p class="lead">URLを貼って解析 → ナレッジに蓄積 → AIが勝ちパターンを学習 → 改良案・新規生成に反映 ↻</p>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="analyze">🔍 解析</button>
+      <button class="tab" data-tab="generate">✨ 白紙から生成</button>
+      <button class="tab" data-tab="insights">🧠 学習結果</button>
+    </div>
+
+    <div id="tab-analyze" class="tab-panel active">
+      <div class="form-row">
+        <input id="url" type="text" placeholder="TikTok / Instagram / YouTube ShortsのURL" />
+        <button id="run">解析する</button>
+      </div>
+      <div class="form-row" style="margin-top:-4px;">
+        <label class="checkline">
+          <input type="checkbox" id="is-own-input" />
+          自分の投稿として登録（PDCA対象）
+        </label>
+      </div>
+      <div id="status" class="status"></div>
+
+      <div id="result" style="display:none;">
+        <div class="card" id="video-card" style="display:none;">
+          <div class="video-head">
+            <img id="v-thumb" alt="" />
+            <div class="info">
+              <div class="title" id="v-title"></div>
+              <div class="meta" id="v-meta"></div>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-box"><div class="num" id="m-views">-</div><div class="lbl">👁 再生</div></div>
+            <div class="metric-box"><div class="num" id="m-likes">-</div><div class="lbl">❤️ いいね</div></div>
+            <div class="metric-box"><div class="num" id="m-comments">-</div><div class="lbl">💬 コメント</div></div>
+          </div>
+
+          <div class="actions-row">
+            <button class="secondary" id="refresh-metrics">🔄 メトリクス再取得</button>
+            <label class="checkline">
+              <input type="checkbox" id="own-toggle" />
+              自分の投稿
+            </label>
+            <span id="metrics-saved" class="saved-flash" style="display:none;">✓ 更新</span>
+          </div>
+
+          <div class="actions-row">
+            <span style="font-size:12px;color:var(--muted);">手動で実績入力（PDCAのCheck）:</span>
+            <input type="text" id="manual-views" class="metric-input" placeholder="再生数" />
+            <input type="text" id="manual-likes" class="metric-input" placeholder="いいね数" />
+            <input type="text" id="manual-comments" class="metric-input" placeholder="コメント数" />
+            <button class="secondary" id="save-manual">保存</button>
+          </div>
+
+          <textarea id="note" class="note-area" placeholder="メモ（投稿の狙いや結果の感想など）"></textarea>
+          <div class="actions-row" style="margin-top:6px;">
+            <button class="secondary" id="save-note">メモを保存</button>
+            <span id="note-saved" class="saved-flash" style="display:none;">✓ 保存</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>📝 元動画の台本（書き起こし）</h2>
+          <pre id="original"></pre>
+        </div>
+        <div class="card">
+          <h2>🚀 改良案 3パターン（学習済み勝ちパターン反映）</h2>
+          <div id="variants" class="md"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-generate" class="tab-panel">
+      <div id="gen-banner" class="insight-banner">学習データなし — まず解析タブで何件か投稿を登録すると精度が上がります</div>
+      <div class="form-row">
+        <textarea id="theme" placeholder="例: 一人暮らしの料理初心者向け、5分でできる作り置きレシピ"></textarea>
+      </div>
+      <div class="form-row">
+        <select id="duration">
+          <option value="15">15秒（短尺・フック特化）</option>
+          <option value="30" selected>30秒（標準）</option>
+          <option value="60">60秒（解説・深掘り）</option>
+          <option value="90">90秒（ストーリー）</option>
+        </select>
+        <button id="gen-run">勝ちパターンで生成</button>
+      </div>
+      <div id="gen-status" class="status"></div>
+      <div id="gen-result" class="card" style="display:none;">
+        <h2>✨ 生成された3パターン</h2>
+        <div id="gen-output" class="md"></div>
+      </div>
+    </div>
+
+    <div id="tab-insights" class="tab-panel">
+      <div class="insight-stats">
+        <div class="stat-box"><div class="num" id="ins-entries">-</div><div class="lbl">分析済みナレッジ</div></div>
+        <div class="stat-box"><div class="num" id="ins-views">-</div><div class="lbl">累計再生数</div></div>
+        <div class="stat-box"><div class="num" id="ins-updated">-</div><div class="lbl">最終学習</div></div>
+      </div>
+      <div class="actions-row">
+        <button class="cyan" id="ins-refresh">🔄 今すぐ再学習</button>
+        <span id="ins-status" class="status" style="margin:0;"></span>
+      </div>
+      <div id="ins-empty" class="empty" style="display:none;">
+        まだ学習結果がありません。解析タブで動画を登録すると、3件貯まったタイミングで自動的に学習を開始します。
+      </div>
+      <div id="ins-summary-card" class="card" style="display:none;">
+        <h2>⚡ 鉄則サマリー（生成時に毎回注入）</h2>
+        <div id="ins-summary" class="md"></div>
+      </div>
+      <div id="ins-report-card" class="card" style="display:none;">
+        <h2>📊 詳細レポート</h2>
+        <div id="ins-report" class="md"></div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="sidebar">
+    <h2>📚 ナレッジ <span class="count" id="count"></span></h2>
+    <div id="knowledge-list" class="knowledge-list"></div>
+  </aside>
+</div>
+
+<script>
+  // ───────── Helpers ─────────
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+  function mdToHtml(md) {
+    let html = escapeHtml(md)
+      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/^- (.+)$/gm, "<li>$1</li>")
+      .replace(/(<li>.*<\/li>\n?)+/g, m => "<ul>" + m + "</ul>");
+    return html.replace(/\n/g, "<br>");
+  }
+  function humanize(n) {
+    n = Number(n) || 0;
+    if (n >= 1_000_000) return (n/1_000_000).toFixed(1) + "M";
+    if (n >= 1_000) return (n/1_000).toFixed(1) + "k";
+    return String(n);
+  }
+  function fmtDate(iso) {
+    if (!iso) return "-";
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,"0")}/${d.getDate().toString().padStart(2,"0")} ${d.getHours()}:${d.getMinutes().toString().padStart(2,"0")}`;
+  }
+  function placeholderThumb() {
+    return "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'><rect width='60' height='60' fill='%231a1a20'/><text x='50%25' y='55%25' text-anchor='middle' fill='%239a9aa6' font-size='24' font-family='sans-serif'>🎬</text></svg>";
+  }
+  async function api(path, opts = {}) {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      ...opts,
+    });
+    if (res.status === 401) {
+      showLogin();
+      throw new Error("ログインが必要です");
+    }
+    return res;
+  }
+
+  // ───────── Login flow ─────────
+  const loginScreen = document.getElementById("login-screen");
+  const appScreen = document.getElementById("app-screen");
+  const loginForm = document.getElementById("login-form");
+  const loginUsername = document.getElementById("login-username");
+  const loginPassword = document.getElementById("login-password");
+  const loginBtn = document.getElementById("login-btn");
+  const loginError = document.getElementById("login-error");
+  const meName = document.getElementById("me-name");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  function showLogin() {
+    appScreen.style.display = "none";
+    loginScreen.style.display = "";
+    loginUsername.focus();
+  }
+  function showApp(username) {
+    loginScreen.style.display = "none";
+    appScreen.style.display = "";
+    meName.textContent = username;
+  }
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    loginBtn.disabled = true;
+    loginError.textContent = "";
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: loginUsername.value.trim(),
+          password: loginPassword.value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "ログイン失敗");
+      showApp(data.username);
+      loginPassword.value = "";
+      await initApp();
+    } catch (err) {
+      loginError.textContent = err.message;
+    } finally {
+      loginBtn.disabled = false;
+    }
+  });
+
+  logoutBtn.addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST" });
+    showLogin();
+  });
+
+  // ───────── State ─────────
+  let activeId = null;
+
+  // ───────── Tabs ─────────
+  document.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.tab;
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t === btn));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
+      if (name === "insights") loadInsights();
+      if (name === "generate") refreshGenBanner();
+    });
+  });
+
+  // ───────── Analyze tab ─────────
+  const urlInput = document.getElementById("url");
+  const runBtn = document.getElementById("run");
+  const isOwnInput = document.getElementById("is-own-input");
+  const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const originalEl = document.getElementById("original");
+  const variantsEl = document.getElementById("variants");
+  const videoCard = document.getElementById("video-card");
+  const vThumb = document.getElementById("v-thumb");
+  const vTitle = document.getElementById("v-title");
+  const vMeta = document.getElementById("v-meta");
+  const mViews = document.getElementById("m-views");
+  const mLikes = document.getElementById("m-likes");
+  const mComments = document.getElementById("m-comments");
+  const ownToggle = document.getElementById("own-toggle");
+  const refreshMetricsBtn = document.getElementById("refresh-metrics");
+  const metricsSavedEl = document.getElementById("metrics-saved");
+  const manualViews = document.getElementById("manual-views");
+  const manualLikes = document.getElementById("manual-likes");
+  const manualComments = document.getElementById("manual-comments");
+  const saveManualBtn = document.getElementById("save-manual");
+  const noteEl = document.getElementById("note");
+  const saveNoteBtn = document.getElementById("save-note");
+  const noteSavedEl = document.getElementById("note-saved");
+
+  function showResult(data) {
+    activeId = data.id;
+    if (data.title || data.thumbnail) {
+      videoCard.style.display = "";
+      vThumb.src = data.thumbnail || placeholderThumb();
+      vThumb.onerror = () => { vThumb.src = placeholderThumb(); };
+      vTitle.textContent = data.title || "(タイトル不明)";
+      const metaParts = [];
+      if (data.uploader) metaParts.push(data.uploader);
+      if (data.source) metaParts.push(data.source);
+      if (data.duration) metaParts.push(data.duration + "秒");
+      if (data.created_by) metaParts.push("登録: " + data.created_by);
+      vMeta.textContent = metaParts.join(" • ");
+      mViews.textContent = humanize(data.view_count);
+      mLikes.textContent = humanize(data.like_count);
+      mComments.textContent = humanize(data.comment_count);
+      ownToggle.checked = !!data.is_own;
+      manualViews.value = manualLikes.value = manualComments.value = "";
+    } else {
+      videoCard.style.display = "none";
+    }
+    noteEl.value = data.note || "";
+    noteSavedEl.style.display = "none";
+    metricsSavedEl.style.display = "none";
+    originalEl.textContent = data.original || "";
+    variantsEl.innerHTML = mdToHtml(data.variants || "");
+    resultEl.style.display = "block";
+    document.querySelectorAll(".knowledge-item").forEach(el => {
+      el.classList.toggle("active", Number(el.dataset.id) === activeId);
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function run() {
+    const url = urlInput.value.trim();
+    if (!url) { statusEl.textContent = "URLを入力してください"; return; }
+    runBtn.disabled = true;
+    resultEl.style.display = "none";
+    statusEl.className = "status";
+    statusEl.innerHTML = '<span class="spinner"></span>動画を取得して解析中...（30秒〜2分）';
+    try {
+      const res = await api("/api/analyze", {
+        method: "POST",
+        body: JSON.stringify({ url, is_own: isOwnInput.checked })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "エラー");
+      showResult(data);
+      statusEl.textContent = "完了 ✓ ナレッジに保存しました";
+      urlInput.value = "";
+      isOwnInput.checked = false;
+      await loadList();
+    } catch (e) {
+      statusEl.className = "status error";
+      statusEl.textContent = "エラー: " + e.message;
+    } finally {
+      runBtn.disabled = false;
+    }
+  }
+
+  refreshMetricsBtn.addEventListener("click", async () => {
+    if (activeId == null) return;
+    refreshMetricsBtn.disabled = true;
+    refreshMetricsBtn.textContent = "🔄 取得中...";
+    try {
+      const res = await api(`/api/entries/${activeId}/refresh-metrics`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        mViews.textContent = humanize(data.view_count);
+        mLikes.textContent = humanize(data.like_count);
+        mComments.textContent = humanize(data.comment_count);
+        metricsSavedEl.style.display = "";
+        setTimeout(() => metricsSavedEl.style.display = "none", 2000);
+        await loadList();
+      } else {
+        alert("再取得失敗: " + (data.detail || ""));
+      }
+    } finally {
+      refreshMetricsBtn.disabled = false;
+      refreshMetricsBtn.textContent = "🔄 メトリクス再取得";
+    }
+  });
+
+  ownToggle.addEventListener("change", async () => {
+    if (activeId == null) return;
+    await api(`/api/entries/${activeId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_own: ownToggle.checked })
+    });
+    await loadList();
+  });
+
+  saveManualBtn.addEventListener("click", async () => {
+    if (activeId == null) return;
+    const body = {};
+    if (manualViews.value.trim()) body.view_count = Number(manualViews.value.replace(/,/g,""));
+    if (manualLikes.value.trim()) body.like_count = Number(manualLikes.value.replace(/,/g,""));
+    if (manualComments.value.trim()) body.comment_count = Number(manualComments.value.replace(/,/g,""));
+    if (Object.keys(body).length === 0) return;
+    saveManualBtn.disabled = true;
+    try {
+      const res = await api(`/api/entries/${activeId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const r = await api(`/api/entries/${activeId}`);
+        const data = await r.json();
+        mViews.textContent = humanize(data.view_count);
+        mLikes.textContent = humanize(data.like_count);
+        mComments.textContent = humanize(data.comment_count);
+        metricsSavedEl.style.display = "";
+        setTimeout(() => metricsSavedEl.style.display = "none", 2000);
+        manualViews.value = manualLikes.value = manualComments.value = "";
+        await loadList();
+      }
+    } finally {
+      saveManualBtn.disabled = false;
+    }
+  });
+
+  saveNoteBtn.addEventListener("click", async () => {
+    if (activeId == null) return;
+    saveNoteBtn.disabled = true;
+    try {
+      const res = await api(`/api/entries/${activeId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ note: noteEl.value })
+      });
+      if (res.ok) {
+        noteSavedEl.style.display = "";
+        setTimeout(() => noteSavedEl.style.display = "none", 2000);
+      }
+    } finally {
+      saveNoteBtn.disabled = false;
+    }
+  });
+
+  runBtn.addEventListener("click", run);
+  urlInput.addEventListener("keydown", e => { if (e.key === "Enter") run(); });
+
+  // ───────── Sidebar list ─────────
+  const listEl = document.getElementById("knowledge-list");
+  const countEl = document.getElementById("count");
+
+  async function loadList() {
+    const res = await api("/api/entries");
+    const items = await res.json();
+    countEl.textContent = items.length ? `(${items.length})` : "";
+    if (!items.length) {
+      listEl.innerHTML = '<div class="empty">まだナレッジがありません。<br>URLを貼って解析してみてください。</div>';
+      return;
+    }
+    listEl.innerHTML = items.map(it => {
+      const thumb = it.thumbnail || placeholderThumb();
+      const ownTag = it.is_own ? `<span class="own-badge">自分</span>` : "";
+      const stats = (it.view_count || it.like_count) ? `
+        <div class="stats">
+          <span class="views">👁 ${humanize(it.view_count)}</span>
+          <span>❤ ${humanize(it.like_count)}</span>
+          <span>💬 ${humanize(it.comment_count)}</span>
+        </div>` : "";
+      const by = it.created_by ? `<div class="by">👤 ${escapeHtml(it.created_by)}</div>` : "";
+      return `
+        <div class="knowledge-item" data-id="${it.id}">
+          <button class="ki-delete" data-del="${it.id}" title="削除">✕</button>
+          <div class="ki-row">
+            <img src="${escapeHtml(thumb)}" onerror="this.src='${placeholderThumb()}'" alt="" />
+            <div class="body">
+              <div class="title">${escapeHtml(it.title || "(タイトル不明)")}</div>
+              <div class="meta">
+                <span class="source-badge ${it.source}">${it.source}</span>
+                ${ownTag}
+                <span>${fmtDate(it.created_at)}</span>
+              </div>
+              ${stats}
+              ${by}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    listEl.querySelectorAll(".knowledge-item").forEach(el => {
+      el.addEventListener("click", async (e) => {
+        if (e.target.dataset.del) return;
+        const id = Number(el.dataset.id);
+        const res = await api(`/api/entries/${id}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        document.querySelector('.tab[data-tab="analyze"]').click();
+        showResult(data);
+      });
+    });
+    listEl.querySelectorAll("[data-del]").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("このナレッジを削除しますか？")) return;
+        const id = btn.dataset.del;
+        await api(`/api/entries/${id}`, { method: "DELETE" });
+        if (Number(id) === activeId) {
+          resultEl.style.display = "none";
+          activeId = null;
+        }
+        loadList();
+      });
+    });
+
+    if (activeId != null) {
+      const el = listEl.querySelector(`.knowledge-item[data-id="${activeId}"]`);
+      if (el) el.classList.add("active");
+    }
+  }
+
+  // ───────── Generate tab ─────────
+  const themeInput = document.getElementById("theme");
+  const durationSelect = document.getElementById("duration");
+  const genRunBtn = document.getElementById("gen-run");
+  const genStatusEl = document.getElementById("gen-status");
+  const genResultCard = document.getElementById("gen-result");
+  const genOutputEl = document.getElementById("gen-output");
+  const genBanner = document.getElementById("gen-banner");
+
+  async function refreshGenBanner() {
+    try {
+      const res = await api("/api/insights");
+      const data = await res.json();
+      if (data.current) {
+        genBanner.classList.add("active");
+        genBanner.textContent = `🧠 ${data.current.entries_analyzed}件のナレッジから学習した勝ちパターンを使って生成します（最終学習: ${fmtDate(data.current.created_at)}）`;
+      } else {
+        genBanner.classList.remove("active");
+        genBanner.textContent = "学習データなし — まず解析タブで何件か投稿を登録すると精度が上がります";
+      }
+    } catch (e) { /* 認証エラーは showLogin 済 */ }
+  }
+
+  genRunBtn.addEventListener("click", async () => {
+    const theme = themeInput.value.trim();
+    if (!theme) { genStatusEl.textContent = "テーマを入力してください"; return; }
+    genRunBtn.disabled = true;
+    genResultCard.style.display = "none";
+    genStatusEl.className = "status";
+    genStatusEl.innerHTML = '<span class="spinner"></span>生成中...';
+    try {
+      const res = await api("/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ theme, duration_sec: Number(durationSelect.value) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "エラー");
+      genOutputEl.innerHTML = mdToHtml(data.scripts);
+      genResultCard.style.display = "block";
+      genStatusEl.textContent = data.insight_used ? "✓ 学習済み勝ちパターンを反映して生成" : "✓ 生成完了（学習データなし）";
+    } catch (e) {
+      genStatusEl.className = "status error";
+      genStatusEl.textContent = "エラー: " + e.message;
+    } finally {
+      genRunBtn.disabled = false;
+    }
+  });
+
+  // ───────── Insights tab ─────────
+  const insEntries = document.getElementById("ins-entries");
+  const insViews = document.getElementById("ins-views");
+  const insUpdated = document.getElementById("ins-updated");
+  const insRefreshBtn = document.getElementById("ins-refresh");
+  const insStatusEl = document.getElementById("ins-status");
+  const insEmpty = document.getElementById("ins-empty");
+  const insSummaryCard = document.getElementById("ins-summary-card");
+  const insReportCard = document.getElementById("ins-report-card");
+  const insSummary = document.getElementById("ins-summary");
+  const insReport = document.getElementById("ins-report");
+
+  async function loadInsights() {
+    try {
+      const res = await api("/api/insights");
+      const data = await res.json();
+      insEntries.textContent = data.total_entries;
+      insViews.textContent = data.current ? humanize(data.current.total_views) : "-";
+      insUpdated.textContent = data.current ? fmtDate(data.current.created_at).slice(5) : "未学習";
+      if (data.current) {
+        insEmpty.style.display = "none";
+        insSummaryCard.style.display = "";
+        insReportCard.style.display = "";
+        insSummary.innerHTML = mdToHtml(data.current.summary);
+        insReport.innerHTML = mdToHtml(data.current.report);
+      } else {
+        insEmpty.style.display = "";
+        insSummaryCard.style.display = "none";
+        insReportCard.style.display = "none";
+      }
+    } catch (e) { /* 認証エラーは showLogin 済 */ }
+  }
+
+  insRefreshBtn.addEventListener("click", async () => {
+    insRefreshBtn.disabled = true;
+    insStatusEl.className = "status";
+    insStatusEl.innerHTML = '<span class="spinner"></span>学習中...（10〜30秒）';
+    try {
+      const res = await api("/api/insights/refresh", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "エラー");
+      insStatusEl.textContent = "✓ 再学習完了";
+      await loadInsights();
+      await refreshGenBanner();
+      setTimeout(() => insStatusEl.textContent = "", 3000);
+    } catch (e) {
+      insStatusEl.className = "status error";
+      insStatusEl.textContent = "エラー: " + e.message;
+    } finally {
+      insRefreshBtn.disabled = false;
+    }
+  });
+
+  // ───────── Init ─────────
+  async function initApp() {
+    await loadList();
+    await refreshGenBanner();
+  }
+
+  async function checkAuth() {
+    try {
+      const res = await fetch("/api/me");
+      if (res.ok) {
+        const data = await res.json();
+        showApp(data.username);
+        await initApp();
+      } else {
+        showLogin();
+      }
+    } catch (e) {
+      showLogin();
+    }
+  }
+
+  checkAuth();
+</script>
+</body>
+</html>

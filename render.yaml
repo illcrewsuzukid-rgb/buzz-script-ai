@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: buzz-script-ai
+    env: docker
+    plan: free
+    region: singapore
+    branch: main
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
