@@ -54,6 +54,27 @@ FFMPEG_DIR = FFMPEG.parent
 gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_NAME = "gemini-2.5-flash"
 MAX_INLINE_BYTES = 18 * 1024 * 1024
+GEMINI_MAX_RETRIES = 4
+GEMINI_RETRY_BASE_DELAY = 2.0
+
+
+def gemini_generate(contents, config):
+    last_err = None
+    for attempt in range(GEMINI_MAX_RETRIES):
+        try:
+            return gemini_client.models.generate_content(
+                model=MODEL_NAME, contents=contents, config=config,
+            )
+        except Exception as e:
+            msg = str(e)
+            transient = any(s in msg for s in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED", "INTERNAL", "DEADLINE_EXCEEDED"))
+            last_err = e
+            if not transient or attempt == GEMINI_MAX_RETRIES - 1:
+                raise
+            delay = GEMINI_RETRY_BASE_DELAY * (2 ** attempt)
+            print(f"[gemini] transient error, retry {attempt + 1}/{GEMINI_MAX_RETRIES} in {delay:.1f}s: {msg[:200]}")
+            time.sleep(delay)
+    raise last_err
 INSIGHT_TRIGGER_DELTA = 3
 INSIGHT_TOP_N = 20
 METRICS_REFRESH_INTERVAL = 60 * 60
@@ -369,8 +390,7 @@ def generate_insights() -> Optional[dict]:
     prompt = PROMPT_INSIGHTS + "\n\n## 分析対象データ（上位ほど高パフォーマンス）\n\n" + "\n\n".join(materials)
 
     try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_NAME,
+        response = gemini_generate(
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -678,8 +698,7 @@ def analyze(req: AnalyzeRequest, username: str = Depends(current_user)):
         )
 
     try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_NAME,
+        response = gemini_generate(
             contents=[
                 remix_prompt(),
                 types.Part.from_bytes(data=audio_bytes, mime_type="audio/mp3"),
@@ -690,6 +709,9 @@ def analyze(req: AnalyzeRequest, username: str = Depends(current_user)):
             ),
         )
     except Exception as e:
+        msg = str(e)
+        if "503" in msg or "UNAVAILABLE" in msg:
+            raise HTTPException(status_code=503, detail="Gemini が混雑しています。1〜2分待って再度お試しください。")
         raise HTTPException(status_code=500, detail=f"Gemini API エラー: {e}")
 
     try:
@@ -713,8 +735,7 @@ def generate_blank(req: GenerateRequest, username: str = Depends(current_user)):
     if not theme:
         raise HTTPException(status_code=400, detail="テーマを入力してください")
     try:
-        response = gemini_client.models.generate_content(
-            model=MODEL_NAME,
+        response = gemini_generate(
             contents=generate_prompt(theme, req.duration_sec),
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -723,6 +744,9 @@ def generate_blank(req: GenerateRequest, username: str = Depends(current_user)):
         )
         data = json.loads(response.text)
     except Exception as e:
+        msg = str(e)
+        if "503" in msg or "UNAVAILABLE" in msg:
+            raise HTTPException(status_code=503, detail="Gemini が混雑しています。1〜2分待って再度お試しください。")
         raise HTTPException(status_code=500, detail=f"Gemini API エラー: {e}")
     return {
         "theme": theme,
