@@ -113,15 +113,7 @@ def row_dict(row) -> dict:
 
 def safe_add_columns(cursor, table: str, cols: dict):
     for col, definition in cols.items():
-        try:
-            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
-        except Exception as e:
-            msg = str(e).lower()
-            if "already exists" not in msg and "duplicate column" not in msg:
-                raise
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {definition}")
 
 
 def init_db() -> None:
@@ -292,6 +284,18 @@ def fetch_metadata(url: str) -> dict:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return {}
+
+
+def coerce_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n\n".join(coerce_text(v) for v in value)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, indent=2)
+    return str(value)
 
 
 def extract_metrics(meta: dict) -> dict:
@@ -716,8 +720,8 @@ def analyze(req: AnalyzeRequest, username: str = Depends(current_user)):
 
     try:
         data = json.loads(response.text)
-        original = (data.get("original") or "").strip()
-        variants = (data.get("variants") or "").strip()
+        original = coerce_text(data.get("original")).strip()
+        variants = coerce_text(data.get("variants")).strip()
     except (json.JSONDecodeError, AttributeError) as e:
         raise HTTPException(status_code=500, detail=f"AIの応答を解析できませんでした: {e}")
 
@@ -751,7 +755,7 @@ def generate_blank(req: GenerateRequest, username: str = Depends(current_user)):
     return {
         "theme": theme,
         "duration_sec": req.duration_sec,
-        "scripts": (data.get("scripts") or "").strip(),
+        "scripts": coerce_text(data.get("scripts")).strip(),
         "insight_used": bool(latest_insight_summary()),
     }
 

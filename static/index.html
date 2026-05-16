@@ -361,7 +361,7 @@
 
     <div id="tab-analyze" class="tab-panel active">
       <div class="form-row">
-        <input id="url" type="text" placeholder="TikTok / Instagram / YouTube ShortsのURL" />
+        <textarea id="url" rows="3" placeholder="TikTok / Instagram / YouTube ShortsのURL（1行に1つ、複数貼ると同時解析。最大3件並列）"></textarea>
         <button id="run">解析する</button>
       </div>
       <div class="form-row" style="margin-top:-4px;">
@@ -639,20 +639,27 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function run() {
-    const url = urlInput.value.trim();
-    if (!url) { statusEl.textContent = "URLを入力してください"; return; }
+  async function analyzeOne(url, isOwn) {
+    const res = await api("/api/analyze", {
+      method: "POST",
+      body: JSON.stringify({ url, is_own: isOwn })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "エラー");
+    return data;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+  }
+
+  async function runSingle(url) {
     runBtn.disabled = true;
     resultEl.style.display = "none";
     statusEl.className = "status";
     statusEl.innerHTML = '<span class="spinner"></span>動画を取得して解析中...（30秒〜2分）';
     try {
-      const res = await api("/api/analyze", {
-        method: "POST",
-        body: JSON.stringify({ url, is_own: isOwnInput.checked })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "エラー");
+      const data = await analyzeOne(url, isOwnInput.checked);
       showResult(data);
       statusEl.textContent = "完了 ✓ ナレッジに保存しました";
       urlInput.value = "";
@@ -663,6 +670,75 @@
       statusEl.textContent = "エラー: " + e.message;
     } finally {
       runBtn.disabled = false;
+    }
+  }
+
+  async function runBatch(urls) {
+    runBtn.disabled = true;
+    resultEl.style.display = "none";
+    const isOwn = isOwnInput.checked;
+    const states = urls.map(u => ({ url: u, status: "queued", error: null }));
+    const renderProgress = (footer = "") => {
+      statusEl.className = "status";
+      statusEl.innerHTML = states.map(s => {
+        const icon = s.status === "done" ? "✅"
+          : s.status === "error" ? "❌"
+          : s.status === "running" ? '<span class="spinner"></span>'
+          : "⏳";
+        const short = s.url.length > 70 ? s.url.slice(0, 70) + "…" : s.url;
+        const errMsg = s.error ? ` <span style="color:#f88;">— ${escapeHtml(s.error)}</span>` : "";
+        return `<div style="margin:4px 0;font-size:13px;">${icon} ${escapeHtml(short)}${errMsg}</div>`;
+      }).join("") + footer;
+    };
+    renderProgress();
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    let okCount = 0, errCount = 0;
+
+    async function worker() {
+      while (cursor < states.length) {
+        const idx = cursor++;
+        states[idx].status = "running";
+        renderProgress();
+        try {
+          await analyzeOne(states[idx].url, isOwn);
+          states[idx].status = "done";
+          okCount++;
+        } catch (e) {
+          states[idx].status = "error";
+          states[idx].error = e.message;
+          errCount++;
+        }
+        renderProgress();
+        if (okCount + errCount < states.length) await loadList();
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, urls.length) }, worker)
+    );
+
+    const summary = `<div style="margin-top:10px;font-weight:bold;">完了: ${okCount}/${urls.length}件成功${errCount ? `、${errCount}件失敗` : ""}</div>`;
+    renderProgress(summary);
+    if (okCount > 0) {
+      urlInput.value = "";
+      isOwnInput.checked = false;
+      await loadList();
+    }
+    runBtn.disabled = false;
+  }
+
+  async function run() {
+    const urls = urlInput.value
+      .split(/[\n\r]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    if (urls.length === 0) { statusEl.textContent = "URLを入力してください"; return; }
+    if (urls.length === 1) {
+      await runSingle(urls[0]);
+    } else {
+      await runBatch(urls);
     }
   }
 
